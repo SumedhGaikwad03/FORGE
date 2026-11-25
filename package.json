@@ -1,5 +1,5 @@
 {
-  "name": "claudemini",
+  "name": "forge",
   "module": "index.ts",
   "type": "module",
   "private": true,
