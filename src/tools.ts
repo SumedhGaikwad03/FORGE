@@ -35,6 +35,29 @@ export const toolHandlers: Record<
     }
   },
 
+  search_web: async (args: { query: string }) => {
+
+  const response = await fetch(
+    "https://api.tavily.com/search",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        api_key: process.env.TAVILY_API_KEY,
+        query: args.query,
+        search_depth: "basic",
+        max_results: 5
+      })
+    }
+  );
+
+  const data: any = await response.json();
+
+  return JSON.stringify(data.results);
+},
+
   get_weather: async (args: { city: string }) => {
     console.log("\nFetching weather for:", args.city);
 
@@ -112,6 +135,24 @@ export const tools = [
         }
       },
       required: ["task"]
+    }
+  }
+},
+{
+  type: "function",
+  function: {
+    name: "search_web",
+    description:
+      "Search the internet for information and return relevant web results.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "The search query"
+        }
+      },
+      required: ["query"]
     }
   }
 },
