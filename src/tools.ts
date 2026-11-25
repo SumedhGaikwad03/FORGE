@@ -1,12 +1,20 @@
 import { $ } from "bun";
 import { runSubAgent } from "./agent";
+import type { MaxPrice } from "@openrouter/sdk/models";
 
 
 
-export const toolHandlers: Record<
-  string,
-  (args: any) => Promise<string>
-> = {
+
+// this is specifiaclly usefull for thr variable depth in the  ai agent 
+
+const Max_depth = 4 ; 
+
+
+export function createToolHandlers(currentDepth: number) {
+  const toolHandlers: Record<
+    string,
+    (args: any) => Promise<string>
+  > = {
 
   run_bash: async (args: { command: string }) => {
     console.log("\nRunning PowerShell:", args.command);
@@ -20,13 +28,18 @@ export const toolHandlers: Record<
     }
   },
 
-  run_sub_agent : async (args : { task : string})=> {
+  run_sub_agent : async (args : { task : string  })=> {
 
     console.log(`\n This is used to create an subagent for a task , the task given is ${args.task}`);
 
+     console.log(`Delegation requested from depth ${currentDepth}`);
     try {
 
-      const result = await runSubAgent(args.task);
+      if (currentDepth >= Max_depth) {
+  return "Maximum agent depth reached. Complete the task using your available tools.";
+}
+
+      const result = await runSubAgent(args.task , currentDepth+1);
       return JSON.stringify(result) || "Command executed with no output";
     }
     catch(err:any){
@@ -77,6 +90,8 @@ export const toolHandlers: Record<
   },
 
 };
+ return toolHandlers ;
+}
 
 
 
