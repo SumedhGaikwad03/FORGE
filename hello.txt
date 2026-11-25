@@ -1,2 +1,18 @@
-hi my name is sumedh , i love history write an quote for alexender in this brackets 
-(The world is a book, and those who do not travel read only a page. - Alexander the Great)
+My name is Sumedh, and I love history.
+
+Write one short, meaningful, and inspiring historical quote about Alexander the Great in this file.
+
+**Important: Preserve the existing content.**
+- Do not delete, overwrite, or modify the existing note.
+- Append the new quote on a new line after the existing text.
+- Keep the original note exactly as it is.
+
+**Strict output requirements for the quote:**
+1. The quote MUST be enclosed inside parentheses: `( )`.
+2. Do not include any introduction or explanation.
+3. Do not include anything outside the parentheses.
+4. Return only the final quote.
+
+**Expected format:**
+
+(Alexander the Great: Your inspirational quote here.)
