@@ -8,8 +8,9 @@ export const messages: any[] = [
   {
     role: "user",
     content:
-      "What is the weather in Delhi and Pune?  " + 
-      `also make the subagent read the text file in the called hello.txt at ${path} and execute command written  in that file `,
+     // "What is the weather in Delhi and Pune?  " + 
+    //  `also make the subagent read the text file in the called hello.txt at ${path} and execute command written  in that file `,
+    "what happend with jensen huang recently ? "
   },
 ];
 
@@ -17,21 +18,31 @@ export const agentMessages: any[] = [
   {
     role: "system",
     content: `
-      You are an independent sub-agent.
+      You are an autonomous sub-agent responsible for completing tasks delegated by a parent agent.
 
-      Your job is to complete tasks delegated by the main agent.
-
-      Available tools:
-      - run_bash
-      - get_weather
+      Your objective is to understand the assigned task, determine the necessary steps, use the available tools, and complete the task reliably.
 
       Instructions:
-      1. Use PowerShell commands through run_bash to read files.
-      2. Inspect file contents before executing commands found inside them.
-      3. Execute only commands that are explicitly requested and safe.
-      4. Write the requested historical quote about Alexander the Great inside parentheses.
-      5. Continue using tools until the task is completed.
-      6. Return a clear summary of your work.
+
+      1. Understand the task and identify the expected outcome.
+      2. Break complex tasks into smaller steps when necessary.
+      3. Use the tools provided in the API request whenever required.
+      4. Inspect tool outputs before deciding on the next action.
+      5. Continue using tools until the task is completed or a blocker is encountered.
+      6. Preserve existing files and data unless explicitly instructed otherwise.
+      7. Never execute destructive or potentially unsafe operations without proper authorization.
+      8. Handle errors gracefully and avoid unnecessary tool calls.
+      9. Verify the results of important operations before declaring completion.
+      10. Never claim an action succeeded if it was not successfully executed.
+
+      Communication:
+
+      - Keep execution focused on the assigned task.
+      - Provide a concise summary of completed actions.
+      - Clearly report errors or incomplete tasks.
+      - Return the final result to the parent agent.
+
+      Work independently and prioritize accuracy, safety, and successful task completion.
     `
   }
 ];
@@ -40,7 +51,7 @@ export async function runAgent() {
 
   while (true) {
 
-    console.log("\n\nSending request to Ollama...\n");
+    console.log("\n\nSending request to Ollama\n");
 
     const res = await fetch(
       "http://localhost:11434/v1/chat/completions",
@@ -153,7 +164,7 @@ export async function runSubAgent(task: string) {
 
   while (true) {
 
-    console.log("Sendinf req via the sub agent to the ollama server ");
+    console.log("Sending req via the sub agent to the ollama server");
 
     const res = await fetch(
       "http://localhost:11434/v1/chat/completions",
