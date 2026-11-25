@@ -1,5 +1,5 @@
 import { readStreamingResponse } from "./stream";
-import { toolHandlers, tools } from "./tools";
+import { createToolHandlers, tools } from "./tools";
 
 const path: string = String.raw`C:\Users\777su\Desktop\claudeMini\hello.txt`;
 
@@ -7,47 +7,63 @@ const path: string = String.raw`C:\Users\777su\Desktop\claudeMini\hello.txt`;
 export const messages: any[] = [
   {
     role: "user",
-    content:
-     // "What is the weather in Delhi and Pune?  " + 
-    //  `also make the subagent read the text file in the called hello.txt at ${path} and execute command written  in that file `,
-    "what happend with jensen huang recently ? "
-  },
-];
+   content: `
+  Test the recursive delegation system.
 
-export const agentMessages: any[] = [
-  {
-    role: "system",
-    content: `
-      You are an autonomous sub-agent responsible for completing tasks delegated by a parent agent.
+  Delegate this task to a sub-agent:
+  "Find three facts about NVIDIA."
 
-      Your objective is to understand the assigned task, determine the necessary steps, use the available tools, and complete the task reliably.
+  That sub-agent must delegate the task to another
+  sub-agent, and continue until maximum depth is reached.
 
-      Instructions:
+  The deepest agent must use search_web to find the facts.
 
-      1. Understand the task and identify the expected outcome.
-      2. Break complex tasks into smaller steps when necessary.
-      3. Use the tools provided in the API request whenever required.
-      4. Inspect tool outputs before deciding on the next action.
-      5. Continue using tools until the task is completed or a blocker is encountered.
-      6. Preserve existing files and data unless explicitly instructed otherwise.
-      7. Never execute destructive or potentially unsafe operations without proper authorization.
-      8. Handle errors gracefully and avoid unnecessary tool calls.
-      9. Verify the results of important operations before declaring completion.
-      10. Never claim an action succeeded if it was not successfully executed.
+  Each parent must wait for its child, inspect the
+  returned result, and pass a summary to its own parent.
 
-      Communication:
-
-      - Keep execution focused on the assigned task.
-      - Provide a concise summary of completed actions.
-      - Clearly report errors or incomplete tasks.
-      - Return the final result to the parent agent.
-
-      Work independently and prioritize accuracy, safety, and successful task completion.
-    `
+  Return the final combined result.
+`
   }
 ];
 
+// export const agentMessages: any[] = [
+//   {
+//     role: "system",
+//     content: `
+//       You are an autonomous sub-agent responsible for completing tasks delegated by a parent agent.
+
+//       Your objective is to understand the assigned task, determine the necessary steps, use the available tools, and complete the task reliably.
+
+//       Instructions:
+
+//       1. Understand the task and identify the expected outcome.
+//       2. Break complex tasks into smaller steps when necessary.
+//       3. Use the tools provided in the API request whenever required.
+//       4. Inspect tool outputs before deciding on the next action.
+//       5. Continue using tools until the task is completed or a blocker is encountered.
+//       6. Preserve existing files and data unless explicitly instructed otherwise.
+//       7. Never execute destructive or potentially unsafe operations without proper authorization.
+//       8. Handle errors gracefully and avoid unnecessary tool calls.
+//       9. Verify the results of important operations before declaring completion.
+//       10. Never claim an action succeeded if it was not successfully executed.
+
+//       Communication:
+
+//       - Keep execution focused on the assigned task.
+//       - Provide a concise summary of completed actions.
+//       - Clearly report errors or incomplete tasks.
+//       - Return the final result to the parent agent.
+
+//       Work independently and prioritize accuracy, safety, and successful task completion.
+//     `
+//   }
+// ];
+
 export async function runAgent() {
+
+  const toolHandlers = createToolHandlers(0);
+
+  console.log("Starting MAIN AGENT at depth 0");
 
   while (true) {
 
@@ -83,19 +99,18 @@ export async function runAgent() {
 
     // Read streamed response the response that is given by the model is captured here 
     // and sent here for futher processing 
-    const assistantMessage =
-      await readStreamingResponse(res);
+    const assistantMessage = await readStreamingResponse(res);
 
       // this is the tool call by the internal redis string 
     console.log(
       "\n\nTool calls in this response:",
-      assistantMessage.tool_calls.length
+      assistantMessage.tool_calls?.length ?? 0 
     );
 
     // Push assistant response into conversation
     messages.push(assistantMessage);
 
-    // STOPPING CONDITION
+    // if no tools are vaild then stop the cond 
     if (
       !assistantMessage.tool_calls ||
       assistantMessage.tool_calls.length === 0
@@ -155,7 +170,46 @@ export async function runAgent() {
 }
 
 
-export async function runSubAgent(task: string) {
+export async function runSubAgent(task: string  , currentDepth : number ){
+
+  const toolHandlers = createToolHandlers(currentDepth);
+
+   console.log(`\n========== SUB-AGENT DEPTH ${currentDepth} ==========`);
+
+  // local sub array is better as multiple sub arrays will not mix up the execution here 
+  // as each agent needs its own execution here for making the 
+  const agentMessages: any[] = [
+  {
+    role: "system",
+    content: `
+      You are an autonomous sub-agent responsible for completing tasks delegated by a parent agent.
+
+      Your objective is to understand the assigned task, determine the necessary steps, use the available tools, and complete the task reliably.
+
+      Instructions:
+
+      1. Understand the task and identify the expected outcome.
+      2. Break complex tasks into smaller steps when necessary.
+      3. Use the tools provided in the API request whenever required.
+      4. Inspect tool outputs before deciding on the next action.
+      5. Continue using tools until the task is completed or a blocker is encountered.
+      6. Preserve existing files and data unless explicitly instructed otherwise.
+      7. Never execute destructive or potentially unsafe operations without proper authorization.
+      8. Handle errors gracefully and avoid unnecessary tool calls.
+      9. Verify the results of important operations before declaring completion.
+      10. Never claim an action succeeded if it was not successfully executed.
+
+      Communication:
+
+      - Keep execution focused on the assigned task.
+      - Provide a concise summary of completed actions.
+      - Clearly report errors or incomplete tasks.
+      - Return the final result to the parent agent.
+
+      Work independently and prioritize accuracy, safety, and successful task completion.
+    `
+  }
+];
 
   agentMessages.push({
     role: "user",

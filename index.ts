@@ -1,7 +1,7 @@
 import { runAgent , runSubAgent} from "./src/agent";
 export { API_KEY } from "./src/config";
 export { readStreamingResponse } from "./src/stream";
-export { toolHandlers, tools } from "./src/tools";
+export { createToolHandlers, tools } from "./src/tools";
 export { runAgent, messages , runSubAgent } from "./src/agent";
 
 
