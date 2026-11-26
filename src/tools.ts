@@ -21,6 +21,23 @@ type ToolContext = {
 
 
 export function createToolHandlers(Context : ToolContext){
+  // Track delegated tasks to prevent repeated delegation of completed tasks and infinite retry loops
+  const taskHistory = new Map<
+    string,
+    {
+      result: string;
+      completed: boolean;
+      attempts: number;
+      lastFailureReason?: string;
+    }
+  >();
+
+  const MAX_RETRY_ATTEMPTS = 2;
+
+  function strKey(str: string): string {
+    return str.toLowerCase().replace(/[^\w\s]/g, "").trim().replace(/\s+/g, " ");
+  }
+
   const toolHandlers: Record<
     string,
     (args: any) => Promise<string>
@@ -28,30 +45,86 @@ export function createToolHandlers(Context : ToolContext){
 
     // no tools can create there own sub agent all it can do is delegate tasks here 
   run_bash: async (args: { command: string }) => {
-    console.log("\nRunning PowerShell:", args.command);
+    console.log("\nRunning Bun Shell:", args.command);
 
     try {
-      const output = await $`powershell.exe -NoProfile -Command ${args.command}`.text();
+      const output = await $`${{ raw: args.command }}`.nothrow().quiet();
+      const stdout = output.stdout.toString().trim();
+      const stderr = output.stderr.toString().trim();
 
-      return output.trim() || "Command executed with no output";
+      if (output.exitCode !== 0) {
+        return `Command failed (exit code ${output.exitCode}): ${stderr || stdout || "Unknown error"}`;
+      }
+
+      return stdout || stderr || "Command executed with no output";
     } catch (err: any) {
       return `Command failed: ${err.message}`;
     }
   },
 
-  run_sub_agent : async (args : { task : string  })=> {
-
-    console.log(`\n This is used to create an subagent for a task , the task given is ${args.task}`);
-
-     console.log(`Delegation requested from depth ${Context.currentDepth}`);
-    try {
-
-      const result = await Context.delegateTask(args.task) ;
-      return result || "Command executed with no output";
+  run_sub_agent: async (args: any) => {
+    // 1. Validate that args.task exists and is a non-empty string
+    if (!args || typeof args.task !== "string" || !args.task.trim()) {
+      return "Error: Invalid task argument. The 'task' argument must be a non-empty string, not an object or empty value.";
     }
-    catch(err:any){
 
-      return `Command failed because ${err.message}`;
+    const task = args.task.trim();
+    const taskKey = strKey(task);
+    const existing = taskHistory.get(taskKey);
+
+    // 2. Safeguard: Do not retry a completed task
+    if (existing && existing.completed) {
+      console.log(`[Depth ${Context.currentDepth}] Task already completed. Skipping re-delegation: "${task}"`);
+      return `Task is already COMPLETED. Previous result:\n${existing.result}\nDo not re-delegate this task. Use the existing result to synthesize your final response.`;
+    }
+
+    // 3. Safeguard: Limit repeated attempts for the same failed task
+    if (existing && existing.attempts >= MAX_RETRY_ATTEMPTS) {
+      console.log(`[Depth ${Context.currentDepth}] Retry limit reached for task: "${task}"`);
+      return `Error: Delegation retry limit reached (${MAX_RETRY_ATTEMPTS} attempts). Last failure reason: ${existing.lastFailureReason || "Unknown failure"}. Do not retry this task; report this failure in your final response.`;
+    }
+
+    const currentAttempt = (existing?.attempts ?? 0) + 1;
+    console.log(`\nDelegating task from depth ${Context.currentDepth} (attempt ${currentAttempt}): "${task}"`);
+
+    try {
+      const result = await Context.delegateTask(task);
+
+      if (!result || typeof result !== "string" || !result.trim()) {
+        const failureMsg = "Error: Child agent completed with no output or empty result.";
+        taskHistory.set(taskKey, {
+          result: failureMsg,
+          completed: false,
+          attempts: currentAttempt,
+          lastFailureReason: failureMsg,
+        });
+        return failureMsg;
+      }
+
+      const trimmedResult = result.trim();
+      const isFailed =
+        trimmedResult.startsWith("Error:") ||
+        trimmedResult.startsWith("Command failed:") ||
+        trimmedResult.startsWith("Delegation failed:") ||
+        (/\bFAILED\b/i.test(trimmedResult) && !/\bCOMPLETED\b/i.test(trimmedResult));
+
+      taskHistory.set(taskKey, {
+        result: trimmedResult,
+        completed: !isFailed,
+        attempts: currentAttempt,
+        lastFailureReason: isFailed ? trimmedResult : undefined,
+      });
+
+      return trimmedResult;
+    } catch (err: any) {
+      const errorMsg = `Delegation failed: ${err.message || String(err)}`;
+      taskHistory.set(taskKey, {
+        result: errorMsg,
+        completed: false,
+        attempts: currentAttempt,
+        lastFailureReason: errorMsg,
+      });
+      return errorMsg;
     }
   },
 
@@ -138,13 +211,13 @@ export const tools = [
     function: {
       name: "run_bash",
       description:
-        "Execute commands using Windows PowerShell syntax",
+        "Execute a shell or bash command using Bun's cross-platform shell environment.",
       parameters: {
         type: "object",
         properties: {
           command: {
             type: "string",
-            description: "The PowerShell command to execute",
+            description: "The shell command to execute (e.g. ls, cat, echo, grep, etc.).",
           },
         },
         required: ["command"],
@@ -157,14 +230,14 @@ export const tools = [
   function: {
     name: "run_sub_agent",
     description:
-      "Delegate a task to an independent AI sub-agent. The sub-agent can use its permitted tools and returns a summary of its work.",
+      "Delegate a task to a child FORGE agent. The child executes the task and returns its result.",
     parameters: {
       type: "object",
       properties: {
         task: {
           type: "string",
           description:
-            "Describe the specific task that the sub-agent should complete."
+            "The task the child agent must complete, including necessary context and requirements."
         }
       },
       required: ["task"]
