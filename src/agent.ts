@@ -23,6 +23,8 @@ export const messages: any[] = [
   }
 ];
 
+// this is the function that is responsible for the excuting the task this is basically an agent here 
+
 export async function executeAgent(task : string ,
   currentDepth : number , 
   delegateTask : (task :string) => Promise<string>,
@@ -33,17 +35,48 @@ export async function executeAgent(task : string ,
 
 
   const systemPrompt = currentDepth === 0
-    ? `You are the Master Coordinator Agent.
-Your role:
-1. Break down the user's objective into separate sub-tasks.
-2. Delegate each sub-task to an independent sub-agent using \`run_sub_agent\`.
-3. Do NOT execute operational tools directly—always delegate.
-4. Wait for all sub-agents to finish, synthesize their findings, and present a structured final response.`
-    : `You are an operational sub-agent tasked with executing a specific assigned task.
-Your role:
-1. Use your available tools (run_bash, get_weather, search_web) to complete the assignment.
-2. Verify tool outputs before concluding.
-3. Return a direct, factual summary of your results to your parent agent.`;
+    ? `You are FORGE, the root coordinator.
+
+Your job is to plan tasks, delegate them to subagents, track their results, and provide the final response.
+
+Rules:
+1. Break the user's request into clear, independent tasks.
+2. Delegate tasks using run_sub_agent.
+3. Give each subagent all context and requirements it needs.
+4. Track which tasks are complete, failed, or incomplete.
+5. Do not perform operational tasks yourself.
+6. Do not assume a task succeeded. Check the subagent's result.
+7. Combine the results into one accurate response.
+8. Never claim work was completed without evidence.
+
+Keep delegation focused. Do not create unnecessary subtasks.`
+    : `You are a FORGE execution agent.
+
+Your job is to complete the task assigned by the parent agent.
+
+Rules:
+1. Understand the task before using tools.
+2. Use the available tools to perform the requested work.
+3. Use actual command syntax supported by the execution environment.
+4. Always communicate and respond in English.
+5. You are executing in the project root directory (./). Always check the current working directory first using cat or ls before searching elsewhere.
+6. Reuse file paths and results discovered earlier. Never invent paths.
+7. Complete all required steps, not just the first step.
+8. Verify important actions before reporting success.
+9. If something fails, try a reasonable correction.
+10. Do not claim success without evidence.
+11. Delegate only if run_sub_agent is available and delegation is genuinely useful.
+12. Report the result clearly.
+
+End your response with one status:
+COMPLETED
+PARTIALLY COMPLETED
+FAILED
+
+Include a short explanation and evidence for the status.`;
+
+// this array that is used for the process of agent messages that is given to a sub agent in the 
+// in the file system 
 
   const agentMessages: any[] = [
     {
@@ -52,10 +85,12 @@ Your role:
     },
     {
       role: "user",
+      // this is the task that we sent to the user on which it can iterate and work upon 
       content: task
     }
   ];
 
+// this is used to fetch tool handelers that supports each tool execution one by one 
 
     const toolHandlers = createToolHandlers({
     currentDepth,
@@ -136,12 +171,15 @@ Your role:
     // this point the first call is completed here 
 
 
-    // if no tools are vaild then stop the cond 
+    // if no tools are called then return the final response
     if (
       !assistantMessage.tool_calls ||
       assistantMessage.tool_calls.length === 0
     ) {
-      return assistantMessage.content || "Task is done ";
+      if (!assistantMessage.content || !assistantMessage.content.trim()) {
+        return "Error: Agent finished without providing any output or completion status.";
+      }
+      return assistantMessage.content.trim();
     }
    // console.log("The agent has finished the first loop for iteration ")
     
@@ -179,9 +217,13 @@ Your role:
         JSON.stringify(args, null, 2)
       );
 
-      const result = handler
+      const rawResult = handler
         ? await handler(args)
         : `Error: Tool "${toolName}" is not permitted at depth ${currentDepth}`;
+
+      const result = typeof rawResult === "string" && rawResult.trim()
+        ? rawResult.trim()
+        : "Error: Tool executed but returned an empty or invalid result.";
 
       
         console.log(

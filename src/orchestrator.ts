@@ -14,30 +14,41 @@ async function runNode(
     `\nOrchestrator starting agent at depth ${currentDepth}`
   );
 
-  return await executeAgent(
-    task,
-    currentDepth,
+  try {
+    // here is where actully the first agent start now as this is the call to the first agent now 
+    const result = await executeAgent(
+      task,
+      currentDepth,
 
-    // Give the agent a delegation capability.
-    // The callback returns control to the orchestrator.
-    async (childTask: string) => {
+      // Give the agent a delegation capability.
+      // The callback returns control to the orchestrator.
+      async (childTask: string) => {
 
-      if (currentDepth >= MAX_DEPTH) {
-        return "Maximum delegation depth reached.";
-      }
+        if (currentDepth >= MAX_DEPTH) {
+          return `Error: Maximum delegation depth (${MAX_DEPTH}) reached. Cannot delegate further.`;
+        }
 
-      console.log(
-        `Orchestrator delegating from ${currentDepth} to ${currentDepth + 1}`
-      );
+        console.log(
+          `Orchestrator delegating from ${currentDepth} to ${currentDepth + 1}`
+        );
 
-      return await runNode(
-        childTask,
-        currentDepth + 1
-      );
-    },
+        return await runNode(
+          childTask,
+          currentDepth + 1
+        );
+      },
 
-    currentDepth <  MAX_DEPTH 
-  );
+      currentDepth <  MAX_DEPTH 
+    );
+
+    if (!result || typeof result !== "string" || !result.trim()) {
+      return `Error: Agent at depth ${currentDepth} returned empty or invalid output.`;
+    }
+
+    return result.trim();
+  } catch (err: any) {
+    return `Error: Agent execution at depth ${currentDepth} failed: ${err.message || String(err)}`;
+  }
 }
 
 

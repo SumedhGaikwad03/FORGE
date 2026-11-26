@@ -17,4 +17,4 @@ Write one short, meaningful, and inspiring historical quote about Alexander the 
 **Expected format:**
 
 (Alexander the Great: Your inspirational quote here.)
-\nThe FORGE system has initialized and is now active.
+(Alexander the Great: The ends justify the means.)
