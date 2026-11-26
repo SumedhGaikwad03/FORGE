@@ -10,9 +10,6 @@ export const messages: any[] = [
    content: `
   Test the recursive delegation system.
 
-  Delegate this task to a sub-agent:
-  "Find three facts about NVIDIA."
-
   That sub-agent must delegate the task to another
   sub-agent, and continue until maximum depth is reached.
 
@@ -26,44 +23,70 @@ export const messages: any[] = [
   }
 ];
 
-// export const agentMessages: any[] = [
-//   {
-//     role: "system",
-//     content: `
-//       You are an autonomous sub-agent responsible for completing tasks delegated by a parent agent.
+export async function executeAgent(task : string ,
+  currentDepth : number , 
+  delegateTask : (task :string) => Promise<string>,
+  canDelegate : boolean
+) {
 
-//       Your objective is to understand the assigned task, determine the necessary steps, use the available tools, and complete the task reliably.
+  // this is an system promt for thr agent itself here 
 
-//       Instructions:
 
-//       1. Understand the task and identify the expected outcome.
-//       2. Break complex tasks into smaller steps when necessary.
-//       3. Use the tools provided in the API request whenever required.
-//       4. Inspect tool outputs before deciding on the next action.
-//       5. Continue using tools until the task is completed or a blocker is encountered.
-//       6. Preserve existing files and data unless explicitly instructed otherwise.
-//       7. Never execute destructive or potentially unsafe operations without proper authorization.
-//       8. Handle errors gracefully and avoid unnecessary tool calls.
-//       9. Verify the results of important operations before declaring completion.
-//       10. Never claim an action succeeded if it was not successfully executed.
+  const systemPrompt = currentDepth === 0
+    ? `You are the Master Coordinator Agent.
+Your role:
+1. Break down the user's objective into separate sub-tasks.
+2. Delegate each sub-task to an independent sub-agent using \`run_sub_agent\`.
+3. Do NOT execute operational tools directly—always delegate.
+4. Wait for all sub-agents to finish, synthesize their findings, and present a structured final response.`
+    : `You are an operational sub-agent tasked with executing a specific assigned task.
+Your role:
+1. Use your available tools (run_bash, get_weather, search_web) to complete the assignment.
+2. Verify tool outputs before concluding.
+3. Return a direct, factual summary of your results to your parent agent.`;
 
-//       Communication:
+  const agentMessages: any[] = [
+    {
+      role: "system",
+      content: systemPrompt
+    },
+    {
+      role: "user",
+      content: task
+    }
+  ];
 
-//       - Keep execution focused on the assigned task.
-//       - Provide a concise summary of completed actions.
-//       - Clearly report errors or incomplete tasks.
-//       - Return the final result to the parent agent.
 
-//       Work independently and prioritize accuracy, safety, and successful task completion.
-//     `
-//   }
-// ];
+    const toolHandlers = createToolHandlers({
+    currentDepth,
+    delegateTask
+  });
 
-export async function runAgent() {
+  // we check if we can delate to the sub agent else any tool can be called for the agent 
+  // we block the tool that is called as the run_sub_agent here 
 
-  const toolHandlers = createToolHandlers(0);
+  let availableTools ; 
 
-  console.log("Starting MAIN AGENT at depth 0");
+  if(currentDepth === 0){
+
+    // the only tool you have is to delegate the execution to
+    // another agent 
+    availableTools = tools.filter(tool => 
+      tool.function.name === "run_sub_agent"
+    );
+
+  }else if (!canDelegate){
+
+    availableTools = tools.filter(tool =>
+       tool.function.name !== "run_sub_agent");
+  } else {
+
+    availableTools = tools ; 
+  }
+
+ 
+
+   console.log(`Starting agent at depth ${currentDepth}`); 
 
   while (true) {
 
@@ -80,9 +103,9 @@ export async function runAgent() {
         },
 
         body: JSON.stringify({
-          model: "qwen3:8b",
-          messages,
-          tools,
+          model: "qwen2.5:14b",
+          messages : agentMessages,
+          tools : availableTools,
           tool_choice: "auto",
           // the model sends you small chunks as it genrated them 
           // sends as SSE "server side events in the loop"
@@ -108,15 +131,19 @@ export async function runAgent() {
     );
 
     // Push assistant response into conversation
-    messages.push(assistantMessage);
+    agentMessages.push(assistantMessage);
+
+    // this point the first call is completed here 
+
 
     // if no tools are vaild then stop the cond 
     if (
       !assistantMessage.tool_calls ||
       assistantMessage.tool_calls.length === 0
     ) {
-      return assistantMessage.content;
+      return assistantMessage.content || "Task is done ";
     }
+   // console.log("The agent has finished the first loop for iteration ")
     
     for (const call of assistantMessage.tool_calls) {
 
@@ -132,7 +159,7 @@ export async function runAgent() {
           call.function.arguments
         );
 
-        messages.push({
+        agentMessages.push({
           role: "tool",
           tool_call_id: call.id,
           content: "Error: Invalid JSON arguments",
@@ -141,7 +168,11 @@ export async function runAgent() {
         continue;
       }
 
-      const handler = toolHandlers[toolName];
+      const isPermitted = availableTools.some(t => t.function.name === toolName);
+
+
+
+      const handler = isPermitted ? toolHandlers[toolName] : null ;
 
       console.log(
         `\nTool called: ${toolName}`,
@@ -150,13 +181,16 @@ export async function runAgent() {
 
       const result = handler
         ? await handler(args)
-        : `Error: Unknown tool "${toolName}"`;
+        : `Error: Tool "${toolName}" is not permitted at depth ${currentDepth}`;
 
-      console.log("\nTool result:", result);
+      
+        console.log(
+        `Agent depth ${currentDepth} executed ${toolName}`
+      );
 
       // Send tool result back to model 
       // this is the part we push the current result into the messages and then the loop goes on as it is 
-      messages.push({
+      agentMessages.push({
         role: "tool",
         tool_call_id: call.id,
         content: result,
@@ -169,128 +203,3 @@ export async function runAgent() {
   }
 }
 
-
-export async function runSubAgent(task: string  , currentDepth : number ){
-
-  const toolHandlers = createToolHandlers(currentDepth);
-
-   console.log(`\n========== SUB-AGENT DEPTH ${currentDepth} ==========`);
-
-  // local sub array is better as multiple sub arrays will not mix up the execution here 
-  // as each agent needs its own execution here for making the 
-  const agentMessages: any[] = [
-  {
-    role: "system",
-    content: `
-      You are an autonomous sub-agent responsible for completing tasks delegated by a parent agent.
-
-      Your objective is to understand the assigned task, determine the necessary steps, use the available tools, and complete the task reliably.
-
-      Instructions:
-
-      1. Understand the task and identify the expected outcome.
-      2. Break complex tasks into smaller steps when necessary.
-      3. Use the tools provided in the API request whenever required.
-      4. Inspect tool outputs before deciding on the next action.
-      5. Continue using tools until the task is completed or a blocker is encountered.
-      6. Preserve existing files and data unless explicitly instructed otherwise.
-      7. Never execute destructive or potentially unsafe operations without proper authorization.
-      8. Handle errors gracefully and avoid unnecessary tool calls.
-      9. Verify the results of important operations before declaring completion.
-      10. Never claim an action succeeded if it was not successfully executed.
-
-      Communication:
-
-      - Keep execution focused on the assigned task.
-      - Provide a concise summary of completed actions.
-      - Clearly report errors or incomplete tasks.
-      - Return the final result to the parent agent.
-
-      Work independently and prioritize accuracy, safety, and successful task completion.
-    `
-  }
-];
-
-  agentMessages.push({
-    role: "user",
-    content: task
-  });
-
-  while (true) {
-
-    console.log("Sending req via the sub agent to the ollama server");
-
-    const res = await fetch(
-      "http://localhost:11434/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer ollama",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "qwen3:8b",
-          messages: agentMessages,
-          tools,
-          tool_choice: "auto",
-          stream: true,
-        }),
-      }
-    );
-
-    if (!res.ok) {
-      throw new Error(
-        `Sub-agent API error ${res.status}: ${await res.text()}`
-      );
-    }
-
-    const assistantMessage =
-      await readStreamingResponse(res);
-
-    // Save the assistant response
-    agentMessages.push(assistantMessage);
-
-    // Stop when there are no more tool calls
-    if (
-      !assistantMessage.tool_calls ||
-      assistantMessage.tool_calls.length === 0
-    ) {
-      return assistantMessage.content || "Sub-agent completed.";
-    }
-
-    // Execute requested tools
-    for (const call of assistantMessage.tool_calls) {
-
-      const toolName = call.function.name;
-
-      let args: any;
-
-      try {
-        args = JSON.parse(call.function.arguments);
-      } catch {
-        agentMessages.push({
-          role: "tool",
-          tool_call_id: call.id,
-          content: "Error: Invalid JSON arguments",
-        });
-
-        continue;
-      }
-
-      const handler = toolHandlers[toolName];
-
-      const result = handler
-        ? await handler(args)
-        : `Unknown tool: ${toolName}`;
-
-      console.log(`Sub-agent executed: ${toolName}`);
-      console.log("Result:", result);
-
-      agentMessages.push({
-        role: "tool",
-        tool_call_id: call.id,
-        content: String(result),
-      });
-    }
-  }
-}
