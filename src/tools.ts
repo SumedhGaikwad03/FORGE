@@ -1,21 +1,32 @@
 import { $ } from "bun";
-import { runSubAgent } from "./agent";
+//import { runSubAgent } from "./agent";
 import type { MaxPrice } from "@openrouter/sdk/models";
+import type { Tool } from "@openrouter/agent";
 
 
 
 
 // this is specifiaclly usefull for thr variable depth in the  ai agent 
 
-const Max_depth = 4 ; 
+//const Max_depth = 4 ; 
+// the max depth function is needed in the orcharater layer 
 
 
-export function createToolHandlers(currentDepth: number) {
+// we define the tool context here that other functions can use 
+type ToolContext = {
+  currentDepth: number;
+  delegateTask: (task: string) => Promise<string>;
+}; 
+
+
+
+export function createToolHandlers(Context : ToolContext){
   const toolHandlers: Record<
     string,
     (args: any) => Promise<string>
   > = {
 
+    // no tools can create there own sub agent all it can do is delegate tasks here 
   run_bash: async (args: { command: string }) => {
     console.log("\nRunning PowerShell:", args.command);
 
@@ -32,15 +43,11 @@ export function createToolHandlers(currentDepth: number) {
 
     console.log(`\n This is used to create an subagent for a task , the task given is ${args.task}`);
 
-     console.log(`Delegation requested from depth ${currentDepth}`);
+     console.log(`Delegation requested from depth ${Context.currentDepth}`);
     try {
 
-      if (currentDepth >= Max_depth) {
-  return "Maximum agent depth reached. Complete the task using your available tools.";
-}
-
-      const result = await runSubAgent(args.task , currentDepth+1);
-      return JSON.stringify(result) || "Command executed with no output";
+      const result = await Context.delegateTask(args.task) ;
+      return result || "Command executed with no output";
     }
     catch(err:any){
 
@@ -49,27 +56,38 @@ export function createToolHandlers(currentDepth: number) {
   },
 
   search_web: async (args: { query: string }) => {
+    try {
+      if (!process.env.TAVILY_API_KEY) {
+        return "Search failed: TAVILY_API_KEY environment variable is not configured.";
+      }
 
-  const response = await fetch(
-    "https://api.tavily.com/search",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        api_key: process.env.TAVILY_API_KEY,
-        query: args.query,
-        search_depth: "basic",
-        max_results: 5
-      })
+      const response = await fetch(
+        "https://api.tavily.com/search",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            api_key: process.env.TAVILY_API_KEY,
+            query: args.query,
+            search_depth: "basic",
+            max_results: 5
+          })
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return `Search API error (${response.status}): ${errorText}`;
+      }
+
+      const data: any = await response.json();
+      return JSON.stringify(data.results ?? []) || "No results found.";
+    } catch (err: any) {
+      return `Search failed: ${err.message}`;
     }
-  );
-
-  const data: any = await response.json();
-
-  return JSON.stringify(data.results);
-},
+  },
 
   get_weather: async (args: { city: string }) => {
     console.log("\nFetching weather for:", args.city);

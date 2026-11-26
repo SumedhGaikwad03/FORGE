@@ -38,7 +38,12 @@ export async function readStreamingResponse(res: Response) {
     if (!rawData || rawData === "[DONE]") return;
 
     // convert the incoming JSON string into a JavaScript object
-    const data = JSON.parse(rawData);
+    let data: any;
+    try {
+      data = JSON.parse(rawData);
+    } catch {
+      return;
+    }
 
     // check if the API has returned an error
     if (data.error) {
