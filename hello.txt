@@ -1,6 +1,7 @@
 My name is Sumedh, and I love history.
 
 Write one short, meaningful, and inspiring historical quote about Alexander the Great in this file.
+also write an quote form elon musk regading hardwork 
 
 **Important: Preserve the existing content.**
 - Do not delete, overwrite, or modify the existing note.
@@ -14,7 +15,8 @@ Write one short, meaningful, and inspiring historical quote about Alexander the 
 3. Do not include anything outside the parentheses.
 4. Return only the final quote.
 
-**Expected format:**
 
-(Alexander the Great: Your inspirational quote here.)
-(Alexander the Great: The ends justify the means.)
+
+next task is to write an simple hello world code in rust python and go programming language 
+("There is nothing impossible to him who will try." - Alexander the Great)
+("Work like hell. I mean you just have to put in 80 to 100 hour weeks every week. This improves the odds of success." - Elon Musk)

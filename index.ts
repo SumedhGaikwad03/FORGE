@@ -1,35 +1,35 @@
-import { executeAgent } from "./src/agent";
-export { API_KEY } from "./src/config";
-export { readStreamingResponse } from "./src/stream";
-export { createToolHandlers, tools } from "./src/tools";
-export { executeAgent } from "./src/agent";
-
-
 import { runMainAgent } from "./src/orchestrator";
 
 async function main() {
+  const result = await runMainAgent(`
+You have 5 distinct tasks to complete. Delegate ALL 5 tasks simultaneously to 5 separate sub-agents in parallel using \`run_sub_agent\`:
 
+1. Live Weather Check (External API):
+   - Get the current live weather for Pune and Tokyo.
 
-const result = await runMainAgent(`
-You have 3 tasks to complete. Delegate each task to a separate sub-agent using \`run_sub_agent\`:
+2. Project File Discovery (Shell I/O):
+   - List all files in the current working directory and count how many TypeScript (.ts) files exist.
 
-1. Weather Check:
-   - Get the current weather for Pune and Delhi.
+3. File Inspection & Reading (Local Filesystem):
+   - Find and read "hello.txt", and execute the task given in that file 
 
-2. Shell Execution:
-   - Run a command to list all files in the current working directory.
+4. Real-Time Tech Research (Web Search API):
+   - Search the web for the latest NVIDIA Blackwell or GPU architecture announcements.
 
-3. File Task:
-   - Find and read "hello.txt", then execute the instructions written inside it.
+5. System Environment Audit (Host Inspection):
+   - Run a command to report the current Bun runtime version, operating system architecture, and current working directory path.
 
 Rules:
-- Do not execute these tasks yourself; assign each one to its own sub-agent.
-- Collect the results from all 3 sub-agents and return a clean, consolidated summary.
+- Do not execute any of these operational tasks yourself; assign each one to its own dedicated sub-agent.
+- Delegate all 5 tasks in parallel so they can execute concurrently.
+- Collect the results from all 5 sub-agents and return a consolidated final summary with a structured markdown report.
 `);
 
+  console.log("\n=================== FINAL CONSOLIDATED RESULT ===================");
+  console.log(result);
+  console.log("=================================================================\n");
+}
 
-console.log("\nFINAL RESULT:\n", result);
- }
 main().catch((err: any) => {
   console.error("\nAgent failed:", err.message);
-})
+});
