@@ -1,13 +1,18 @@
 import { executeAgent } from "./agent";
+import { Blackboard } from "./blackboard";
 
 const MAX_DEPTH = 4;
 
 
-// Creates and manages the agent hierarchy
+// Creates and manages the agent hierarchy in the entire project here 
+// this makes sure that we have mutiple sub agents that run through the system in 
+// a node here runs that makes sure that the another call gets executed 
 
 async function runNode(
   task: string,
-  currentDepth: number
+  currentDepth: number,
+  // we pass the black board as an param into the run node function 
+  blackboard: Blackboard
 ): Promise<string> {
 
   console.log(
@@ -21,7 +26,9 @@ async function runNode(
       currentDepth,
 
       // Give the agent a delegation capability.
-      // The callback returns control to the orchestrator.
+      // this is essenatlly the delgate task function that we pass along the function 
+      // The callback returns control to the orchestrator. 
+      // this means that an agent can call and use this function to make more agents 
       async (childTask: string) => {
 
         if (currentDepth >= MAX_DEPTH) {
@@ -34,18 +41,32 @@ async function runNode(
 
         return await runNode(
           childTask,
-          currentDepth + 1
+          currentDepth + 1,
+          blackboard
         );
       },
 
-      currentDepth <  MAX_DEPTH 
+      currentDepth <  MAX_DEPTH,
+      blackboard
     );
 
     if (!result || typeof result !== "string" || !result.trim()) {
       return `Error: Agent at depth ${currentDepth} returned empty or invalid output.`;
     }
 
-    return result.trim();
+    const trimmed = result.trim();
+
+    // we have the result for the current agent 
+    // Automatically record sub-agent findings to the blackboard 
+    if (currentDepth > 0 && !trimmed.startsWith("Error:")) {
+      blackboard.addFinding(task, trimmed);
+    }
+
+   console.log("\n--- BLACKBOARD SNAPSHOT ---");
+console.log(blackboard.getSnapshot());
+console.log("---------------------------\n");
+
+    return trimmed;
   } catch (err: any) {
     return `Error: Agent execution at depth ${currentDepth} failed: ${err.message || String(err)}`;
   }
@@ -55,7 +76,6 @@ async function runNode(
 // Public entry point
 
 export async function runMainAgent(task: string) {
-
-  return await runNode(task, 0);
-
+  const blackboard = new Blackboard();
+  return await runNode(task, 0, blackboard);
 }

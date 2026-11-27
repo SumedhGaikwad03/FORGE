@@ -1,5 +1,6 @@
 import { readStreamingResponse } from "./stream";
 import { createToolHandlers, tools } from "./tools";
+import { Blackboard } from "./blackboard";
 
 const path: string = String.raw`C:\Users\777su\Desktop\claudeMini\hello.txt`;
 
@@ -28,7 +29,9 @@ export const messages: any[] = [
 export async function executeAgent(task : string ,
   currentDepth : number , 
   delegateTask : (task :string) => Promise<string>,
-  canDelegate : boolean
+  canDelegate : boolean,
+  // pass the current blackboard instance to the agent here 
+  blackboard?: Blackboard
 ) {
 
   // this is an system promt for thr agent itself here 
@@ -78,6 +81,12 @@ Include a short explanation and evidence for the status.`;
 // this array that is used for the process of agent messages that is given to a sub agent in the 
 // in the file system 
 
+  // Inject shared blackboard knowledge for sub-agents (depth > 0)
+  const blackboardContext =
+    blackboard && currentDepth > 0 && blackboard.getAllFindings().length > 0
+      ? `\n\n[SHARED KNOWLEDGE FROM PREVIOUS & SIBLING AGENTS]:\n${blackboard.getSnapshot()}`
+      : "";
+
   const agentMessages: any[] = [
     {
       role: "system",
@@ -86,7 +95,8 @@ Include a short explanation and evidence for the status.`;
     {
       role: "user",
       // this is the task that we sent to the user on which it can iterate and work upon 
-      content: task
+      // this is the part that the agent actually works upon now 
+      content: `${task}${blackboardContext}`
     }
   ];
 
@@ -125,21 +135,23 @@ Include a short explanation and evidence for the status.`;
 
   while (true) {
 
-    console.log("\n\nSending request to Ollama\n");
+    console.log(`\n\n[Agent Depth ${currentDepth}] Sending request to OpenRouter...\n`);
 
     const res = await fetch(
-      "http://localhost:11434/v1/chat/completions",
+      "https://openrouter.ai/api/v1/chat/completions",
       {
         method: "POST",
 
         headers: {
-          Authorization: "Bearer ollama",
+        Authorization: `Bearer ${process.env.API_KEY}`,
           "Content-Type": "application/json",
         },
 
         body: JSON.stringify({
-          model: "qwen2.5:14b",
+          model: "z-ai/glm-5.3-flash",
           messages : agentMessages,
+
+          // these are the same tools that are avalilabe for the agent to execute 
           tools : availableTools,
           tool_choice: "auto",
           // the model sends you small chunks as it genrated them 
@@ -155,7 +167,8 @@ Include a short explanation and evidence for the status.`;
       );
     }
 
-    // Read streamed response the response that is given by the model is captured here 
+    // Read streamed response the response that is given by the model is captured here
+    // and printed to the terminal  
     // and sent here for futher processing 
     const assistantMessage = await readStreamingResponse(res);
 
@@ -183,61 +196,66 @@ Include a short explanation and evidence for the status.`;
     }
    // console.log("The agent has finished the first loop for iteration ")
     
-    for (const call of assistantMessage.tool_calls) {
+    // Parallel execution: execute all tool calls in this response concurrently
+    // this will fire the req at the exactly same millisecond 
+    const toolResults = await Promise.all(
+      assistantMessage.tool_calls.map(async (call: any) => {
+        const toolName = call.function.name;
 
-      const toolName = call.function.name;
+        let args: any;
 
-      let args: any;
+        try {
+          args = JSON.parse(call.function.arguments);
+        } catch {
+          console.error(
+            "Invalid tool arguments:",
+            call.function.arguments
+          );
 
-      try {
-        args = JSON.parse(call.function.arguments);
-      } catch {
-        console.error(
-          "Invalid tool arguments:",
-          call.function.arguments
+          return {
+            role: "tool",
+            tool_call_id: call.id,
+            content: "Error: Invalid JSON arguments",
+          };
+        }
+
+        const isPermitted = availableTools.some(t => t.function.name === toolName);
+
+        // store the  call back functiion the variable as const that will be later used to call the tools 
+        const handler = isPermitted ? toolHandlers[toolName] : null;
+
+        console.log(
+          `\nTool called: ${toolName}`,
+          JSON.stringify(args, null, 2)
         );
 
-        agentMessages.push({
+        const rawResult = handler
+          ? await handler(args)
+          : `Error: Tool "${toolName}" is not permitted at depth ${currentDepth}`;
+
+        const result = typeof rawResult === "string" && rawResult.trim()
+          ? rawResult.trim()
+          : "Error: Tool executed but returned an empty or invalid result.";
+
+        console.log(
+          `Agent depth ${currentDepth} executed ${toolName}`
+        );
+
+        // Send tool result back to model 
+        return {
           role: "tool",
           tool_call_id: call.id,
-          content: "Error: Invalid JSON arguments",
-        });
+          content: result,
+        };
+      })
+    ); 
 
-        continue;
-      }
+    // this marks the end of the promise all arch as this will have all the tool requests in itself 
+    // concurrently right ? 
+    
 
-      const isPermitted = availableTools.some(t => t.function.name === toolName);
-
-
-
-      const handler = isPermitted ? toolHandlers[toolName] : null ;
-
-      console.log(
-        `\nTool called: ${toolName}`,
-        JSON.stringify(args, null, 2)
-      );
-
-      const rawResult = handler
-        ? await handler(args)
-        : `Error: Tool "${toolName}" is not permitted at depth ${currentDepth}`;
-
-      const result = typeof rawResult === "string" && rawResult.trim()
-        ? rawResult.trim()
-        : "Error: Tool executed but returned an empty or invalid result.";
-
-      
-        console.log(
-        `Agent depth ${currentDepth} executed ${toolName}`
-      );
-
-      // Send tool result back to model 
-      // this is the part we push the current result into the messages and then the loop goes on as it is 
-      agentMessages.push({
-        role: "tool",
-        tool_call_id: call.id,
-        content: result,
-      });
-    }
+    // Push all tool results into conversation
+    agentMessages.push(...toolResults);
 
     console.log(
       "\nTool execution completed. Starting next cycle..."

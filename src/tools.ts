@@ -19,9 +19,12 @@ type ToolContext = {
 }; 
 
 
+// every time agenst starts then this function is used to create tools for the agent to execute 
 
 export function createToolHandlers(Context : ToolContext){
   // Track delegated tasks to prevent repeated delegation of completed tasks and infinite retry loops
+  // this is used to store the op of the the task so that does not hallusnates here and wander off 
+  // in the loop of same loop calls 
   const taskHistory = new Map<
     string,
     {
@@ -34,6 +37,7 @@ export function createToolHandlers(Context : ToolContext){
 
   const MAX_RETRY_ATTEMPTS = 2;
 
+  // fuzzy dupication logic here we make that string normalised here 
   function strKey(str: string): string {
     return str.toLowerCase().replace(/[^\w\s]/g, "").trim().replace(/\s+/g, " ");
   }
@@ -48,7 +52,8 @@ export function createToolHandlers(Context : ToolContext){
     console.log("\nRunning Bun Shell:", args.command);
 
     try {
-      const output = await $`${{ raw: args.command }}`.nothrow().quiet();
+      const output = await $`${{ raw: args.command }}`.nothrow().quiet(); 
+      // we execute the command  here and then print the output to terminal as in stream the op here 
       const stdout = output.stdout.toString().trim();
       const stderr = output.stderr.toString().trim();
 
@@ -72,22 +77,27 @@ export function createToolHandlers(Context : ToolContext){
     const taskKey = strKey(task);
     const existing = taskHistory.get(taskKey);
 
-    // 2. Safeguard: Do not retry a completed task
+    // Do not retry a completed task
     if (existing && existing.completed) {
       console.log(`[Depth ${Context.currentDepth}] Task already completed. Skipping re-delegation: "${task}"`);
       return `Task is already COMPLETED. Previous result:\n${existing.result}\nDo not re-delegate this task. Use the existing result to synthesize your final response.`;
     }
 
-    // 3. Safeguard: Limit repeated attempts for the same failed task
+    //  Limit repeated attempts for the same failed task
     if (existing && existing.attempts >= MAX_RETRY_ATTEMPTS) {
       console.log(`[Depth ${Context.currentDepth}] Retry limit reached for task: "${task}"`);
       return `Error: Delegation retry limit reached (${MAX_RETRY_ATTEMPTS} attempts). Last failure reason: ${existing.lastFailureReason || "Unknown failure"}. Do not retry this task; report this failure in your final response.`;
     }
+     
 
+    // this is the code that counsts the cuurent  attempts here 
+    
     const currentAttempt = (existing?.attempts ?? 0) + 1;
     console.log(`\nDelegating task from depth ${Context.currentDepth} (attempt ${currentAttempt}): "${task}"`);
 
     try {
+      // this is the line that creates an child  task that will create an sub agent for the task that is to be done 
+
       const result = await Context.delegateTask(task);
 
       if (!result || typeof result !== "string" || !result.trim()) {
@@ -99,7 +109,7 @@ export function createToolHandlers(Context : ToolContext){
           lastFailureReason: failureMsg,
         });
         return failureMsg;
-      }
+      } 
 
       const trimmedResult = result.trim();
       const isFailed =
