@@ -1,13 +1,7 @@
 import { runMainAgent } from "./src/orchestrator";
-import{createInterface} from "readline/promises" ;
-import {stdin as input , stdout as output} from "process";
-
 
 async function main() {
-
-   // this is the line that has a connection in the  terminal and the
-   const rl = createInterface({input , output}); 
-   // this is the main prompt that we give to the system 
+  // this is the main benchmark prompt that tests 5 concurrent sub-agents in parallel 
   const result = await runMainAgent(`
 You have 5 distinct tasks to complete. Delegate ALL 5 tasks simultaneously to 5 separate sub-agents in parallel using \`run_sub_agent\`:
 

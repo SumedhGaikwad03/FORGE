@@ -5,7 +5,7 @@ async function main() {
   console.clear();
 
   // this introduces the forge cli to the user in a clean box
-  p.intro("🤖 FORGE Autonomous Multi-Agent Runtime");
+  p.intro("FORGE Autonomous Multi-Agent Runtime -- ");
 
   while (true) {
     // prompt user for input with built-in validation
@@ -17,7 +17,7 @@ async function main() {
       },
     });
 
-    // handle ctrl+c or cancel
+    // handle ctrl+c or cancel commands  are handeled here
     if (p.isCancel(userInput)) {
       p.outro("Session cancelled. Exiting FORGE...");
       break;
@@ -38,23 +38,20 @@ async function main() {
       continue;
     }
 
-    // start an animated spinner while agents plan and execute
-    const spinner = p.spinner();
-    spinner.start("Coordinator planning and delegating tasks to sub-agents...");
+   console.log("\n-------------------------------------------------------");
+   console.log(" Coordinating agents & executing tasks...");
+   console.log("-------------------------------------------------------\n");
 
     const startTime = Date.now();
 
     try {
-      const result = await runMainAgent(trimmed);
+      console.log(" FORGE >\n");
+      await runMainAgent(trimmed);
+      
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
-
-      // stop the spinner and show how long it took
-      spinner.stop(`All agents finished in ${elapsed}s`);
-
-      // display the final consolidated result inside a clean styled note card
-      p.note(result, "Final Consolidated Report");
+      console.log("\n-------------------------------------------------------");
+      p.log.success(`Completed in ${elapsed}s`);
     } catch (err: any) {
-      spinner.stop("Execution failed!");
       p.log.error(err.message || String(err));
     }
   }
