@@ -2,11 +2,14 @@ import { executeAgent } from "./agent";
 import { Blackboard } from "./blackboard";
 
 const MAX_DEPTH = 4;
+ const blackboard = new Blackboard(); 
 
 
 // Creates and manages the agent hierarchy in the entire project here 
 // this makes sure that we have mutiple sub agents that run through the system in 
 // a node here runs that makes sure that the another call gets executed 
+
+// this is a node as  each node in the project had its own context and the access to the available tools 
 
 async function runNode(
   task: string,
@@ -18,13 +21,11 @@ async function runNode(
   console.log(
     `\nOrchestrator starting agent at depth ${currentDepth}`
   );
-
   try {
     // here is where actully the first agent start now as this is the call to the first agent now 
     const result = await executeAgent(
       task,
       currentDepth,
-
       // Give the agent a delegation capability.
       // this is essenatlly the delgate task function that we pass along the function 
       // The callback returns control to the orchestrator. 
@@ -58,6 +59,8 @@ async function runNode(
 
     // we have the result for the current agent 
     // Automatically record sub-agent findings to the blackboard 
+
+    // this is for other agents to find out 
     if (currentDepth > 0 && !trimmed.startsWith("Error:")) {
       blackboard.addFinding(task, trimmed);
     }
@@ -76,6 +79,13 @@ console.log("---------------------------\n");
 // Public entry point
 
 export async function runMainAgent(task: string) {
-  const blackboard = new Blackboard();
+ 
   return await runNode(task, 0, blackboard);
+}
+
+// this is an function to reset the session 
+
+export function clearSession (){
+
+  blackboard.clear();
 }
