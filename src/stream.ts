@@ -1,10 +1,11 @@
-export async function readStreamingResponse(res: Response) {
+export async function readStreamingResponse(res: Response , shouldStream : boolean = true) {
 
   // first check if the response actually has a body to read
   if (!res.body) {
     throw new Error("Response body is missing");
   }
 
+  
   // this reader is used to consume the incoming stream chunk by chunk
   const reader = res.body.getReader();
 
@@ -25,8 +26,18 @@ export async function readStreamingResponse(res: Response) {
   const toolCalls = new Map<number, any>();
 
 
+  let tokenUsage = {
+
+    prompt_tokens :0 ,
+    completion_tokens : 0,
+    total_tokens : 0 ,
+  };
+
   // this function processes one complete SSE line at a time
   function processLine(line: string) {
+
+
+  
 
     // we only care about lines that contain the actual data
     if (!line.startsWith("data:")) return;
@@ -67,8 +78,10 @@ export async function readStreamingResponse(res: Response) {
       content += delta.content;
 
       // print each incoming fragment directly to the terminal
+      if(shouldStream){
       process.stdout.write(delta.content);
     }
+  }
 
 
     // reconstruct tool calls because the model sends them in small fragments
@@ -116,6 +129,14 @@ export async function readStreamingResponse(res: Response) {
     if (choice.finish_reason) {
       finishReason = choice.finish_reason;
     }
+
+    if(data.usage){
+      tokenUsage = {
+        prompt_tokens : data.usage.prompt_tokens ?? 0,
+        completion_tokens : data.usage.completion_tokens ?? 0 ,
+        total_tokens : data.usage.total_tokens ?? 0 ,
+      };
+    }
   }
 
 
@@ -162,5 +183,6 @@ export async function readStreamingResponse(res: Response) {
     content: content || null,
     tool_calls: Array.from(toolCalls.values()),
     finish_reason: finishReason,
+    usage  : tokenUsage,
   };
 }
