@@ -2,27 +2,7 @@ import { readStreamingResponse } from "./stream";
 import { createToolHandlers, tools } from "./tools";
 import { Blackboard } from "./blackboard";
 import { getSystemPrompt, formatSharedKnowledge } from "./prompts";
-
-const path: string = String.raw`C:\Users\777su\Desktop\claudeMini\hello.txt`;
-
-export const messages: any[] = [
-  {
-    role: "user",
-    content: `
-  Test the recursive delegation system.
-
-  That sub-agent must delegate the task to another
-  sub-agent, and continue until maximum depth is reached.
-
-  The deepest agent must use search_web to find the facts.
-
-  Each parent must wait for its child, inspect the
-  returned result, and pass a summary to its own parent.
-
-  Return the final combined result.
-`,
-  },
-];
+import { API_KEY } from "./config";
 
 // this is the function that is responsible for the excuting the task this is basically an agent here
 
@@ -96,7 +76,7 @@ export async function executeAgent(
       method: "POST",
 
       headers: {
-        Authorization: `Bearer ${process.env.API_KEY}`,
+        Authorization: `Bearer ${API_KEY}`,
         "Content-Type": "application/json",
       },
 
@@ -111,7 +91,7 @@ export async function executeAgent(
         // sends as SSE "server side events in the loop"
         stream: true,
 
-        // this tell the open router that to send us token limits
+        // this tells openrouter to send us token limits in the final chunk
         stream_options: {
           include_usage: true,
         },
@@ -127,7 +107,14 @@ export async function executeAgent(
     const shouldStream = currentDepth === 0;
     const assistantMessage = await readStreamingResponse(res, shouldStream);
 
-    // this is the tool call by the internal redis string
+    // capture and log token usage returned by the stream
+    if (assistantMessage.usage && assistantMessage.usage.total_tokens > 0) {
+      console.log(
+        `[Agent Depth ${currentDepth}] Token usage: ${assistantMessage.usage.total_tokens} (prompt: ${assistantMessage.usage.prompt_tokens}, completion: ${assistantMessage.usage.completion_tokens})`,
+      );
+    }
+
+    // this is the tool call by the agent
     console.log(
       "\n\nTool calls in this response:",
       assistantMessage.tool_calls?.length ?? 0,

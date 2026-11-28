@@ -1,15 +1,6 @@
 import { $ } from "bun";
-//import { runSubAgent } from "./agent";
-import type { MaxPrice } from "@openrouter/sdk/models";
-import type { Tool } from "@openrouter/agent";
 
-
-
-
-// this is specifiaclly usefull for thr variable depth in the  ai agent 
-
-//const Max_depth = 4 ; 
-// the max depth function is needed in the orcharater layer 
+// this is specifically useful for the variable depth in the ai agent 
 
 
 // we define the tool context here that other functions can use 
